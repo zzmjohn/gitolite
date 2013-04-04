@@ -3,11 +3,10 @@
 use lib $ENV{GL_LIBDIR};
 use Gitolite::Easy;
 
-# This command requires unrestricted arguments, so instead of adding it to the
-# COMMANDS hash in the usual way, you need to add it like so:
-#   'git-annex-shell' => 'ua',
-# (i.e., the value for the key should be the string 'ua').
-#
+# This command requires unrestricted arguments, so add it to the ENABLE list
+# like this:
+#   'git-annex-shell ua',
+
 # This requires git-annex version 20111016 or newer. Older versions won't
 # be secure.
 
@@ -62,19 +61,9 @@ INSTRUCTIONS... (NEED TO BE VALIDATED BY SOMEONE WHO KNOWS GIT-ANNEX WELL).
 based on http://git-annex.branchable.com/tips/using_gitolite_with_git-annex/
 ONLY VARIATIONS FROM THAT PAGE ARE WRITTEN HERE.
 
-requirements:
-
-  * gitolite v3.04+ (whatever version has src/commands/git-annex-shell,
-    because I haven't tagged it yet).
-  * git-annex as per that
-
 setup
 
-  * in COMMANDS hash in the rc file, add an entry like this:
-        'git-annex-shell'   =>  'ua',
-    (there is no GL_ADC_PATH and no "ua" subdirectory here, and nothing to
-    "install"; the command already comes with gitolite)
+  * in the ENABLE list in the rc file, add an entry like this:
+        'git-annex-shell ua',
 
 That should be it; everything else should be as in that page.
-
-Once this is tested I'll move it to 'master'.

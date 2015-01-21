@@ -52,7 +52,7 @@ sub sugar {
                 # perl-ism; apart from keeping the full path separate from the
                 # simple name, this also protects %rc from change by implicit
                 # aliasing, which would happen if you touched $s itself
-                my $sfp = _which("syntactic-sugar/$s", 'r');
+                my $sfp = _which( "syntactic-sugar/$s", 'r' );
 
                 _warn("skipped sugar script '$s'"), next if not -r $sfp;
                 $lines = SugarBox::run_sugar_script( $sfp, $lines );
@@ -124,12 +124,6 @@ sub owner_desc {
     # category = "whatever..."
     #   ->  config gitweb.category = whatever...
 
-    # older formats:
-    # repo = "some long description"
-    # repo "owner name" = "some long description"
-    #   ->  config gitweb.owner = owner name
-    #   ->  config gitweb.description = some long description
-
     for my $line (@$lines) {
         if ( $line =~ /^desc = (\S.*)/ ) {
             push @ret, "config gitweb.description = $1";
@@ -137,11 +131,6 @@ sub owner_desc {
             push @ret, "config gitweb.owner = $1";
         } elsif ( $line =~ /^category = (\S.*)/ ) {
             push @ret, "config gitweb.category = $1";
-        } elsif ( $line =~ /^(\S+)(?: "(.*?)")? = "(.*)"$/ ) {
-            my ( $repo, $owner, $desc ) = ( $1, $2, $3 );
-            push @ret, "repo $repo";
-            push @ret, "config gitweb.description = $desc";
-            push @ret, "config gitweb.owner = $owner" if $owner;
         } else {
             push @ret, $line;
         }

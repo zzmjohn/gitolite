@@ -71,6 +71,11 @@ sub in_http {
     $ENV{REMOTE_USER} ||= $rc{HTTP_ANON_USER};
     @ARGV = ( $ENV{REMOTE_USER} );
 
+    my $ip;
+    ( $ip = $ENV{SSH_CONNECTION} || '(no-IP)' ) =~ s/ .*//;
+
+    gl_log( 'http', "ARGV=" . join( ",", @ARGV ), "SOC=" . ( $ENV{SSH_ORIGINAL_COMMAND} || '' ), "FROM=$ip" );
+
     return 'http';
 }
 
@@ -92,16 +97,17 @@ sub in_ssh {
 sub main {
     my $id = shift;
 
-    umask $rc{UMASK};
-
     # set up the user
     my $user = $ENV{GL_USER} = shift @ARGV;
 
     # set up the repo and the attempted access
     my ( $verb, $repo ) = parse_soc();    # returns only for git commands
-    sanity($repo);
+    Gitolite::Conf::Load::sanity($repo, $REPONAME_PATT);
     $ENV{GL_REPO} = $repo;
     my $aa = ( $verb =~ 'upload' ? 'R' : 'W' );
+
+    # set up env vars from options set for this repo
+    env_options($repo);
 
     # auto-create?
     if ( repo_missing($repo) and access( $repo, $user, '^C', 'any' ) !~ /DENIED/ ) {
@@ -117,15 +123,14 @@ sub main {
     # more information.
     unless ( $ENV{GL_BYPASS_ACCESS_CHECKS} ) {
         my $ret = access( $repo, $user, $aa, 'any' );
-        trace( 1, "access($repo, $user, $aa, 'any')", "-> $ret" );
         trigger( 'ACCESS_1', $repo, $user, $aa, 'any', $ret );
         _die $ret . "\n(or you mis-spelled the reponame)" if $ret =~ /DENIED/;
 
-        gl_log( "pre_git", $repo, $user, $aa, 'any', "-> $ret" );
+        gl_log( "pre_git", $repo, $user, $aa, 'any', $ret );
     }
 
     trigger( 'PRE_GIT', $repo, $user, $aa, 'any', $verb );
-    if ($ENV{REQUEST_URI}) {
+    if ( $ENV{REQUEST_URI} ) {
         _system( "git", "http-backend" );
     } else {
         my $repodir = "'$rc{GL_REPO_BASE}/$repo.git'";
@@ -152,23 +157,18 @@ sub parse_soc {
     # after this we should not return; caller expects us to handle it all here
     # and exit out
 
-    _die "suspicious characters loitering about '$soc'" if $soc !~ $REMOTE_COMMAND_PATT;
-
     my @words = split ' ', $soc;
     if ( $rc{COMMANDS}{ $words[0] } ) {
+        if ( $rc{COMMANDS}{ $words[0] } ne 'ua' ) {
+            _die "suspicious characters loitering about '$soc'" if $soc !~ $REMOTE_COMMAND_PATT;
+            _die "no relative paths allowed anywhere!" if $soc =~ m(\.\./);
+        }
         trace( 2, "gitolite command", $soc );
         _system( "gitolite", @words );
         exit 0;
     }
 
     _die "unknown git/gitolite command: '$soc'";
-}
-
-sub sanity {
-    my $repo = shift;
-    _die "'$repo' contains bad characters" if $repo !~ $REPONAME_PATT;
-    _die "'$repo' ends with a '/'"         if $repo =~ m(/$);
-    _die "'$repo' contains '..'"           if $repo =~ m(\.\.);
 }
 
 # ----------------------------------------------------------------------
@@ -181,13 +181,14 @@ sub http_setup_die_handler {
         my $message = shift; chomp($message);
         print STDERR "$message\n";
 
+        http_print_headers($service);
+
         # format the service response, then the message.  With initial
         # help from Ilari and then a more detailed email from Shawn...
         $service = "# service=$service\n"; $message = "ERR $message\n";
         $service = sprintf( "%04X", length($service) + 4 ) . "$service";    # no CRLF on this one
         $message = sprintf( "%04X", length($message) + 4 ) . "$message";
 
-        http_print_headers();
         print $service;
         print "0000";                                                       # flush-pkt, apparently
         print $message;
@@ -216,6 +217,9 @@ sub http_simulate_ssh_connection {
         $ENV{SSH_ORIGINAL_COMMAND} = $verb;
         $ENV{SSH_ORIGINAL_COMMAND} .= " $args" if $args;
         http_print_headers();    # in preparation for the eventual output!
+
+        # we also need to pipe STDERR out via STDOUT, else the user doesn't see those messages!
+        open(STDERR, ">&STDOUT") or _die "Can't dup STDOUT: $!";
     }
     $ENV{SSH_CONNECTION} = "$ENV{REMOTE_ADDR} $ENV{REMOTE_PORT} $ENV{SERVER_ADDR} $ENV{SERVER_PORT}";
 }
@@ -223,7 +227,7 @@ sub http_simulate_ssh_connection {
 my $http_headers_printed = 0;
 
 sub http_print_headers {
-    my ( $code, $text ) = @_;
+    my ( $service, $code, $text ) = @_;
 
     return if $http_headers_printed++;
     $code ||= 200;
@@ -234,6 +238,10 @@ sub http_print_headers {
     print "Expires: Fri, 01 Jan 1980 00:00:00 GMT\r\n";
     print "Pragma: no-cache\r\n";
     print "Cache-Control: no-cache, max-age=0, must-revalidate\r\n";
-    print "Content-Type: text/plain\r\n";
+    if ($service) {
+        print "Content-Type: application/x-$service-advertisement\r\n";
+    } else {
+        print "Content-Type: text/plain\r\n";
+    }
     print "\r\n";
 }

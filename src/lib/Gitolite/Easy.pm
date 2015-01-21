@@ -43,6 +43,8 @@ package Gitolite::Easy;
 
   config
 
+  textfile
+
   %rc
   say
   say2
@@ -50,6 +52,8 @@ package Gitolite::Easy;
   _warn
   _print
   usage
+
+  option
 );
 #>>>
 use Exporter 'import';
@@ -102,7 +106,7 @@ sub in_group {
     my $g = shift;
     $g =~ s/^\@?/@/;
 
-    return grep { $_ eq $g } @{ Gitolite::Conf::Load::list_memberships('-u', $user) };
+    return grep { $_ eq $g } @{ Gitolite::Conf::Load::list_memberships( '-u', $user ) };
 }
 
 # in_role()
@@ -117,7 +121,7 @@ sub in_role {
     $r =~ s/^\@?/@/;
     my $repo = shift;
 
-    return grep { $_ eq $r } @{ Gitolite::Conf::Load::list_memberships("-u", $user, "-r", $repo) };
+    return grep { $_ eq $r } @{ Gitolite::Conf::Load::list_memberships( "-u", $user, "-r", $repo ) };
 }
 
 # owns()
@@ -156,8 +160,8 @@ sub can_read {
 #   if gitolite access -q $REPONAME $GL_USER W; then ...
 sub can_write {
     valid_user();
-    my ($r, $aa, $ref) = @_;
-    $aa ||= 'W';
+    my ( $r, $aa, $ref ) = @_;
+    $aa  ||= 'W';
     $ref ||= 'any';
     return not( access( $r, $user, $aa, $ref ) =~ /DENIED/ );
 }
@@ -178,6 +182,52 @@ sub config {
 
     my $ret = git_config( $repo, $key );
     return %$ret;
+}
+
+# ----------------------------------------------------------------------
+
+# maintain a textfile; see comments in code for details, and calls in various
+# other programs (like 'motd', 'desc', and 'readme') for how to call
+sub textfile {
+    my %h = @_;
+    my $repodir;
+
+    # target file
+    _die "need file" unless $h{file};
+    _die "'$h{file}' contains a '/'" if $h{file} =~ m(/);
+    Gitolite::Conf::Load::sanity($h{file}, $REPONAME_PATT);
+
+    # target file's location.  This can come from one of two places: dir
+    # (which comes from our code, so does not need to be sanitised), or repo,
+    # which may come from the user
+    _die "need exactly one of repo or dir" unless $h{repo} xor $h{dir};
+    _die "'$h{dir}' does not exist" if $h{dir} and not -d $h{dir};
+    if ($h{repo}) {
+        Gitolite::Conf::Load::sanity($h{repo}, $REPONAME_PATT);
+        $h{dir} = "$rc{GL_REPO_BASE}/$h{repo}.git";
+        _die "repo '$h{repo}' does not exist" if not -d $h{dir};
+
+        my $umask = option( $h{repo}, 'umask' );
+        # note: using option() moves us to ADMIN_BASE, but we don't care here
+        umask oct($umask) if $umask;
+    }
+
+    # final full file name
+    my $f = "$h{dir}/$h{file}";
+
+    # operation
+    _die "can't have both prompt and text" if defined $h{prompt} and defined $h{text};
+    if (defined $h{prompt}) {
+        print STDERR $h{prompt};
+        my $t = join( "", <> );
+        _print($f, $t);
+    } elsif (defined $h{text}) {
+        _print($f, $h{text});
+    } else {
+        return slurp($f) if -f $f;
+    }
+
+    return '';
 }
 
 # ----------------------------------------------------------------------

@@ -26,7 +26,7 @@ sub update {
 
     my ( $ref, $oldsha, $newsha, $oldtree, $newtree, $aa ) = args(@ARGV);
 
-    trace( 1, 'update', $ENV{GL_REPO}, $ENV{GL_USER}, $aa, @ARGV );
+    trace( 2, $ENV{GL_REPO}, $ENV{GL_USER}, $aa, @ARGV );
 
     my $ret = access( $ENV{GL_REPO}, $ENV{GL_USER}, $aa, $ref );
     trigger( 'ACCESS_2', $ENV{GL_REPO}, $ENV{GL_USER}, $aa, $ref, $ret, $oldsha, $newsha );
@@ -34,8 +34,7 @@ sub update {
 
     check_vrefs( $ref, $oldsha, $newsha, $oldtree, $newtree, $aa );
 
-    trace( 1, "-> $ret" );
-    gl_log( 'update', $ENV{GL_REPO}, $ENV{GL_USER}, $aa, @ARGV );
+    gl_log( 'update', $ENV{GL_REPO}, $ENV{GL_USER}, $aa, @ARGV, $ret );
     exit 0;
 }
 
@@ -61,7 +60,7 @@ sub check_vrefs {
             }
         } else {
             my ( $dummy, $pgm, @args ) = split '/', $vref;
-            $pgm = _which("VREF/$pgm", 'x');
+            $pgm = _which( "VREF/$pgm", 'x' );
             $pgm or _die "'$vref': helper program missing or unexecutable";
 
             open( my $fh, "-|", $pgm, @_, $vref, @args ) or _die "'$vref': can't spawn helper program: $!";
@@ -88,10 +87,12 @@ sub check_vref {
 
     my $ret = access( $ENV{GL_REPO}, $ENV{GL_USER}, $aa, $ref );
     trace( 2, "access($ENV{GL_REPO}, $ENV{GL_USER}, $aa, $ref)", "-> $ret" );
+    if ( $ret =~ /by fallthru/ ) {
+        trace( 3, "remember, fallthru is success here!" );
+        return;
+    }
     trigger( 'ACCESS_2', $ENV{GL_REPO}, $ENV{GL_USER}, $aa, $ref, $ret );
-    _die "$ret" . ( $deny_message ? "\n$deny_message" : '' )
-      if $ret =~ /DENIED/ and $ret !~ /by fallthru/;
-    trace( 2, "remember, fallthru is success here!" ) if $ret =~ /by fallthru/;
+    _die "$ret" . ( $deny_message ? "\n$deny_message" : '' ) if $ret =~ /DENIED/;
 }
 
 {
@@ -121,7 +122,7 @@ sub args {
     # for branch create or delete, merge_base stays at '0'x40
     chomp( $merge_base = `git merge-base $oldsha $newsha` )
       unless $oldsha eq '0' x 40
-          or $newsha eq '0' x 40;
+      or $newsha eq '0' x 40;
 
     $aa = 'W';
     # tag rewrite

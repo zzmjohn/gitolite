@@ -14,8 +14,9 @@ use warnings;
 
 =for usage
 
-  * In the rc file, add 'RepoUmask::pre_git' and 'RepoUmask::post_create' to
-    the corresponding trigger lists.
+  * In the rc file, add the line
+        'RepoUmask',
+    somewhere in the ENABLE list
 
   * For each repo that is to get a different umask than the default, add a
     line like this:
@@ -29,23 +30,24 @@ use warnings;
 sub post_create {
     my $repo = $_[1];
 
-    my $umask = option($repo, 'umask');
-    _chdir($rc{GL_REPO_BASE});  # because using option() moves us to ADMIN_BASE!
+    my $umask = option( $repo, 'umask' );
+    _chdir( $rc{GL_REPO_BASE} );    # because using option() moves us to ADMIN_BASE!
 
     return unless $umask;
 
     # unlike the one in the rc file, this is a string
     $umask = oct($umask);
-    my $mode = "0" . sprintf("%o", $umask ^ 0777);
+    my $mode = "0" . sprintf( "%o", $umask ^ 0777 );
 
     system("chmod -R $mode $repo.git >&2");
+    system("find $repo.git -type f -exec chmod a-x '{}' \\;");
 }
 
 sub pre_git {
     my $repo = $_[1];
 
-    my $umask = option($repo, 'umask');
-    _chdir($rc{GL_REPO_BASE});  # because using option() moves us to ADMIN_BASE!
+    my $umask = option( $repo, 'umask' );
+    _chdir( $rc{GL_REPO_BASE} );    # because using option() moves us to ADMIN_BASE!
 
     return unless $umask;
 

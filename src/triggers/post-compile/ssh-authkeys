@@ -28,7 +28,7 @@ tsh_try("sestatus");
 my $selinux = ( tsh_text() =~ /enabled/ );
 
 my $ab = $rc{GL_ADMIN_BASE};
-trace( 2, "'keydir' not found in '$ab'; exiting" ), exit if not -d "$ab/keydir";
+trace( 1, "'keydir' not found in '$ab'; exiting" ), exit if not -d "$ab/keydir";
 my $akdir        = "$ENV{HOME}/.ssh";
 my $akfile       = "$ENV{HOME}/.ssh/authorized_keys";
 my $glshell      = $rc{GL_BINDIR} . "/gitolite-shell";
@@ -60,13 +60,13 @@ for my $f (@pubkeys) {
 }
 
 # dump it out
-if (@gl_keys) {
-    my $out = join( "\n", @non_gl, "# gitolite start", @gl_keys, "# gitolite end" ) . "\n";
+my $out = join( "\n", @non_gl, "# gitolite start", @gl_keys, "# gitolite end" ) . "\n";
 
-    my $ak = slurp($akfile);
-    _die "'$akfile' changed between start and end of this program!" if $ak ne $old_ak;
-    _print( $akfile, $out );
-}
+my $ak = slurp($akfile);
+_die "'$akfile' changed between start and end of this program!" if $ak ne $old_ak;
+_print( $akfile, $out );
+
+_warn "you have no keys left; I hope you intended to do that!" unless @gl_keys;
 
 # ----------------------------------------------------------------------
 
@@ -75,8 +75,9 @@ sub sanity {
     _die "'$glshell' found but not readable; this should NOT happen..."   if not -r $glshell;
     _die "'$glshell' found but not executable; this should NOT happen..." if not -x $glshell;
 
-    _warn "$akdir missing; creating a new one"  if not -d $akdir;
-    _warn "$akfile missing; creating a new one" if not -f $akfile;
+    my $n = "    (this is normal on a brand new install)";
+    _warn "$akdir missing; creating a new one\n$n"  if not -d $akdir;
+    _warn "$akfile missing; creating a new one\n$n" if not -f $akfile;
 
     _mkdir( $akdir, 0700 ) if not -d $akdir;
     if ( not -f $akfile ) {
